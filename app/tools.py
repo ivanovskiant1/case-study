@@ -106,6 +106,36 @@ def build_recommendation(brief: ClientBrief) -> Recommendation:
             f"({getattr(winner, kpi_field):.4f}) among products that fit the "
             f"{brief.geo} {brief.vertical} inventory and budget."
         )
+        # If any non-viable product has a higher KPI than the winner, surface
+        # the top one in the rationale so the tradeoff is explicit.
+        higher_kpi_rejected = sorted(
+            [
+                o
+                for o in options
+                if o not in viable
+                and getattr(o, kpi_field) > getattr(winner, kpi_field)
+            ],
+            key=lambda o: getattr(o, kpi_field),
+            reverse=True,
+        )
+        if higher_kpi_rejected:
+            alt = higher_kpi_rejected[0]
+            alt_kpi = getattr(alt, kpi_field)
+            if not alt.meets_scale:
+                reason = (
+                    f"its risk-adjusted inventory ({alt.risk_adjusted_impressions:,}) "
+                    f"can't cover the {alt.estimated_impressions:,} impressions "
+                    f"needed at this budget"
+                )
+            else:
+                reason = (
+                    f"its estimated impressions ({alt.estimated_impressions:,}) "
+                    f"fall short of the client's {brief.impression_goal:,} goal"
+                )
+            rationale += (
+                f" {alt.product_name} has a higher {brief.kpi.upper()} "
+                f"({alt_kpi:.4f}) but {reason}."
+            )
         recommended = viable[:1]
     else:
         # Nothing fits cleanly. Surface the best-by-KPI as a tradeoff candidate.
