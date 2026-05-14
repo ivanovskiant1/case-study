@@ -51,6 +51,38 @@ def _render_recommendation_card(rec: Recommendation) -> None:
         for note in top.notes:
             st.warning(note, icon="⚠️")
 
+        diag = rec.no_fit_diagnostic
+        if diag:
+            with st.container(border=True):
+                st.markdown("**What you could do:**")
+                bullets: list[str] = []
+                if (
+                    diag.max_budget_for_top_kpi
+                    and rec.brief.budget_usd
+                    and diag.max_budget_for_top_kpi < rec.brief.budget_usd
+                ):
+                    bullets.append(
+                        f"Reduce the buy to **~${diag.max_budget_for_top_kpi:,.0f}** — "
+                        f"{diag.top_kpi_product_name} would then fully fit."
+                    )
+                if diag.alternative_geos:
+                    bullets.append(
+                        f"Switch geo to **{', '.join(diag.alternative_geos)}** — "
+                        f"{diag.top_kpi_product_name} fits there at this budget."
+                    )
+                if diag.achievable_impressions and diag.achievable_product_name:
+                    bullets.append(
+                        f"Lower the impression goal — {diag.achievable_product_name} "
+                        f"can deliver **~{diag.achievable_impressions:,}** at this budget."
+                    )
+                if not bullets:
+                    bullets.append(
+                        "No single-product fix found at this budget/geo. "
+                        "Consider splitting across geos or extending flight."
+                    )
+                for b in bullets:
+                    st.markdown(f"- {b}")
+
     if rec.rejected:
         with st.expander(f"Rejected alternatives ({len(rec.rejected)})", expanded=False):
             for opt in rec.rejected:

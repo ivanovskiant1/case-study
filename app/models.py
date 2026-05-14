@@ -38,8 +38,31 @@ class ProductOption(BaseModel):
     notes: list[str] = []
 
 
+class NoFitDiagnostic(BaseModel):
+    """Concrete suggestions when no product fully fits the brief constraints."""
+
+    max_budget_for_top_kpi: Optional[float] = Field(
+        default=None,
+        description="Budget at which the top-KPI product would fully fit on scale.",
+    )
+    top_kpi_product_name: Optional[str] = None
+    alternative_geos: list[str] = Field(
+        default_factory=list,
+        description="Geos where the top-KPI product would fit at the current budget.",
+    )
+    achievable_impressions: Optional[int] = Field(
+        default=None,
+        description=(
+            "When a product fits on scale but the impression goal is too high, "
+            "this is the largest deliverable estimate."
+        ),
+    )
+    achievable_product_name: Optional[str] = None
+
+
 class Recommendation(BaseModel):
     brief: ClientBrief
     recommended: list[ProductOption]
     rejected: list[ProductOption] = []
     rationale: str
+    no_fit_diagnostic: Optional[NoFitDiagnostic] = None

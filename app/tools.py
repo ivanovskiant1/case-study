@@ -3,7 +3,7 @@ from typing import Optional
 import pandas as pd
 
 from . import data
-from .models import ClientBrief, ProductOption, Recommendation
+from .models import ClientBrief, NoFitDiagnostic, ProductOption, Recommendation
 
 
 def get_benchmarks(vertical: str) -> pd.DataFrame:
@@ -37,6 +37,71 @@ def lookup_inventory(product_id: str, vertical: str, geo: str) -> Optional[dict]
         "available_imps": int(r["available_imps"]),
         "inventory_risk": float(r["inventory_risk"]),
     }
+
+
+def _diagnose_no_fit(
+    options: list[ProductOption], brief: ClientBrief, kpi_field: str
+) -> NoFitDiagnostic:
+    """Compute concrete what-if suggestions when nothing fully fits."""
+    diag = NoFitDiagnostic()
+    if not options:
+        return diag
+
+    # The product the strategist would most want — highest KPI, regardless of fit.
+    top = max(options, key=lambda o: getattr(o, kpi_field))
+    diag.top_kpi_product_name = top.product_name
+
+    # 1) Budget reduction — largest budget at which the top-KPI product
+    # would fully fit on scale (risk-adjusted).
+    diag.max_budget_for_top_kpi = round(
+        top.risk_adjusted_impressions * top.cpm / 1000, -2
+    )
+
+    # 2) Geo switch — would the top-KPI product fit at the current budget
+    # in any *other* geo for the same vertical?
+    other_geos = [g for g in ("US", "EMEA", "APAC") if g != brief.geo]
+    for g in other_geos:
+        inv = lookup_inventory(top.product_id, brief.vertical, g)
+        if not inv:
+            continue
+        risk_adj = int(inv["available_imps"] * inv["inventory_risk"])
+        if top.estimated_impressions <= risk_adj:
+            diag.alternative_geos.append(g)
+
+    # 3) Achievable impressions — when a product fits scale but falls short
+    # of the impression goal, report the largest deliverable estimate.
+    if brief.impression_goal is not None:
+        scale_ok = [o for o in options if o.meets_scale]
+        if scale_ok:
+            best = max(scale_ok, key=lambda o: o.estimated_impressions)
+            diag.achievable_impressions = best.estimated_impressions
+            diag.achievable_product_name = best.product_name
+
+    return diag
+
+
+def _format_no_fit_rationale(diag: NoFitDiagnostic, brief: ClientBrief) -> str:
+    parts = [
+        f"No product fully fits a ${brief.budget_usd:,.0f} buy in "
+        f"{brief.geo} {brief.vertical}."
+    ]
+    if diag.max_budget_for_top_kpi and diag.max_budget_for_top_kpi < brief.budget_usd:
+        parts.append(
+            f"To fully deliver {diag.top_kpi_product_name} (top {brief.kpi.upper()}), "
+            f"reduce the buy to ~${diag.max_budget_for_top_kpi:,.0f}."
+        )
+    if diag.alternative_geos:
+        parts.append(
+            f"{diag.top_kpi_product_name} would fit at the current budget in "
+            f"{', '.join(diag.alternative_geos)}."
+        )
+    if diag.achievable_impressions and diag.achievable_product_name:
+        parts.append(
+            f"At this budget, {diag.achievable_product_name} can deliver "
+            f"~{diag.achievable_impressions:,} impressions "
+            f"(below the {brief.impression_goal:,} goal)."
+        )
+    return " ".join(parts)
 
 
 def build_recommendation(brief: ClientBrief) -> Recommendation:
@@ -137,14 +202,14 @@ def build_recommendation(brief: ClientBrief) -> Recommendation:
                 f"({alt_kpi:.4f}) but {reason}."
             )
         recommended = viable[:1]
+        no_fit_diagnostic = None
     else:
-        # Nothing fits cleanly. Surface the best-by-KPI as a tradeoff candidate.
+        # Nothing fits cleanly. Surface the best-by-KPI as a tradeoff candidate,
+        # plus concrete what-if suggestions the strategist can act on.
         options.sort(key=lambda o: getattr(o, kpi_field), reverse=True)
         recommended = options[:1]
-        rationale = (
-            "No product fully meets the scale/impression-goal constraints. "
-            "Best-by-KPI shown with tradeoffs noted."
-        )
+        no_fit_diagnostic = _diagnose_no_fit(options, brief, kpi_field)
+        rationale = _format_no_fit_rationale(no_fit_diagnostic, brief)
 
     recommended_ids = {o.product_id for o in recommended}
     rejected = [o for o in options if o.product_id not in recommended_ids]
@@ -155,4 +220,5 @@ def build_recommendation(brief: ClientBrief) -> Recommendation:
         recommended=recommended,
         rejected=rejected[:3],
         rationale=rationale,
+        no_fit_diagnostic=no_fit_diagnostic,
     )
