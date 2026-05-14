@@ -1,5 +1,7 @@
 # Kargo Media Recommender
 
+**Live demo:** https://k-case-study.streamlit.app
+
 A chatbot-style assistant for Kargo media strategists. Paste a client brief; the assistant parses it, asks for any missing details, and recommends a product (with a small rejected-alternatives list and rationale) using historical campaign benchmarks and inventory forecasts.
 
 ## Stack
