@@ -4,6 +4,12 @@ import streamlit as st
 from app.agent import MediaAgent
 from app.models import Recommendation
 
+
+def _md(text: str) -> str:
+    """Escape characters that Streamlit's markdown would interpret as LaTeX/formatting.
+    Streamlit pairs `$...$` as math mode, which mangles any dollar amount in prose."""
+    return text.replace("$", r"\$")
+
 WELCOME_MESSAGE = """Hi — I'm your **Kargo media-strategy assistant**. Paste a client brief and I'll recommend a product (with benchmarks, inventory checks, and rejected alternatives).
 
 For a **one-shot recommendation with no follow-ups**, include all of these:
@@ -34,7 +40,7 @@ def _render_recommendation_card(rec: Recommendation) -> None:
 
     with st.container(border=True):
         st.markdown(f"### {badge}: {top.product_name}")
-        st.caption(f"Product ID: `{top.product_id}` · CPM ${top.cpm:.2f}")
+        st.caption(f"Product ID: `{top.product_id}` · CPM \\${top.cpm:.2f}")
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Estimated impressions", f"{top.estimated_impressions:,}")
@@ -46,10 +52,10 @@ def _render_recommendation_card(rec: Recommendation) -> None:
         )
         c4.metric("Inventory confidence", f"{top.inventory_risk:.2f}")
 
-        st.markdown(f"**Rationale.** {rec.rationale}")
+        st.markdown(f"**Rationale.** {_md(rec.rationale)}")
 
         for note in top.notes:
-            st.warning(note, icon="⚠️")
+            st.warning(_md(note), icon="⚠️")
 
         diag = rec.no_fit_diagnostic
         if diag:
@@ -62,7 +68,7 @@ def _render_recommendation_card(rec: Recommendation) -> None:
                     and diag.max_budget_for_top_kpi < rec.brief.budget_usd
                 ):
                     bullets.append(
-                        f"Reduce the buy to **~${diag.max_budget_for_top_kpi:,.0f}** — "
+                        f"Reduce the buy to **~\\${diag.max_budget_for_top_kpi:,.0f}** — "
                         f"{diag.top_kpi_product_name} would then fully fit."
                     )
                 if diag.alternative_geos:
@@ -93,7 +99,7 @@ def _render_recommendation_card(rec: Recommendation) -> None:
                     f"Risk-adj. avail. {opt.risk_adjusted_impressions:,}"
                 )
                 for note in opt.notes:
-                    st.caption(f"↳ {note}")
+                    st.caption(_md(f"↳ {note}"))
 
 
 def render() -> None:
