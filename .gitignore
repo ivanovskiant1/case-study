@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+.streamlit/
+
+# Case study source material — keep out of public repo
+*.docx
+.claude/
