@@ -97,10 +97,7 @@ def build_recommendation(brief: ClientBrief) -> Recommendation:
 
     kpi_field = "benchmark_ctr" if brief.kpi == "ctr" else "benchmark_ivr"
     viable = [o for o in options if o.meets_scale and o.meets_impression_goal]
-    rejected = [o for o in options if o not in viable]
-
     viable.sort(key=lambda o: getattr(o, kpi_field), reverse=True)
-    rejected.sort(key=lambda o: getattr(o, kpi_field), reverse=True)
 
     if viable:
         winner = viable[0]
@@ -118,6 +115,10 @@ def build_recommendation(brief: ClientBrief) -> Recommendation:
             "No product fully meets the scale/impression-goal constraints. "
             "Best-by-KPI shown with tradeoffs noted."
         )
+
+    recommended_ids = {o.product_id for o in recommended}
+    rejected = [o for o in options if o.product_id not in recommended_ids]
+    rejected.sort(key=lambda o: getattr(o, kpi_field), reverse=True)
 
     return Recommendation(
         brief=brief,
